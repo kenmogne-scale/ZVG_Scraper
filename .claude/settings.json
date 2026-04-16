@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:3001/api/scrape -H \"Content-Type: application/json\" -d '{\"\"\"\"states\"\"\"\":[\"\"\"\"hb\"\"\"\"],\"\"\"\"limit\"\"\"\":5,\"\"\"\"delayMs\"\"\"\":350}')",
+      "Bash(node -e \":*)",
+      "Read(//c//**)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
+    ]
+  }
+}

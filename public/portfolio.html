@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ZVG Portfolio</title>
+    <style>
+      :root {
+        --bg: #f5f5f5;
+        --bg-deep: #ececeb;
+        --surface: rgba(255, 255, 255, 0.74);
+        --ink: #151515;
+        --muted: rgba(21, 21, 21, 0.52);
+        --muted-strong: rgba(21, 21, 21, 0.72);
+        --line: rgba(21, 21, 21, 0.08);
+        --accent: #151515;
+        --radius-xl: 24px;
+        --shadow: 0 18px 40px rgba(0, 0, 0, 0.06);
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "SF Pro Display", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, #fafafa 0%, var(--bg) 42%, var(--bg-deep) 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), transparent 18%);
+        opacity: 0.8;
+      }
+
+      body.modal-open { overflow: hidden; }
+
+      .wrap {
+        width: min(1520px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 26px 0 42px;
+      }
+
+      .shell { display: grid; gap: 16px; }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .topbar-card {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .metric-label { color: var(--muted); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; }
+      .metric-value { display: block; margin-top: 6px; font-size: clamp(1.05rem, 2vw, 1.4rem); font-weight: 600; letter-spacing: -0.04em; }
+      .metric-note { margin: 3px 0 0; color: var(--muted); font-size: 0.76rem; }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(20px);
+        overflow: hidden;
+      }
+
+      .results-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 0; }
+      .results-head h2 { margin: 0; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.02em; }
+      .results-head p { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; }
+
+      .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+      .nav-link { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.62); color: var(--ink); text-decoration: none; font-size: 0.76rem; font-weight: 600; }
+      .nav-link.is-active { background: #151515; color: #f5f5f5; }
+
+      .result-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(21, 21, 21, 0.05); color: var(--muted-strong); font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
+
+      .table-shell { padding: 12px 12px 12px; }
+
+      .table-wrap {
+        overflow: auto;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.52);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(20px);
+      }
+
+      table { width: 100%; min-width: 900px; border-collapse: separate; border-spacing: 0; font-size: 0.84rem; }
+      th, td { padding: 11px 12px; text-align: center; vertical-align: middle; }
+      th { position: sticky; top: 0; z-index: 1; background: rgba(255, 255, 255, 0.92); color: var(--muted); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; }
+      tbody tr { cursor: pointer; transition: background 160ms ease; }
+      tbody tr:not(:last-child) td { border-bottom: 1px solid rgba(21, 21, 21, 0.04); }
+      tbody tr:hover { background: rgba(21, 21, 21, 0.025); }
+
+      .row-title { display: inline-flex; align-items: center; justify-content: center; width: 100%; color: var(--ink); font-weight: 700; line-height: 1.4; }
+      .small { color: var(--muted); font-size: 0.74rem; line-height: 1.45; }
+      .pill { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 0 8px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); color: #065f46; font-size: 0.72rem; font-weight: 600; }
+      .empty-row td { padding: 28px 16px; color: var(--muted); }
+
+      /* Modal */
+      .modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; }
+      .modal[hidden] { display: none; }
+      .modal-backdrop { position: absolute; inset: 0; background: rgba(15, 15, 15, 0.18); backdrop-filter: blur(10px); }
+      .modal-dialog { position: relative; width: min(920px, 100%); max-height: min(88vh, 920px); overflow: auto; border-radius: 22px; background: rgba(255, 255, 255, 0.9); padding: 18px; border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+      .modal-close { position: sticky; top: 0; margin-left: auto; display: flex; align-items: center; justify-content: center; width: 42px; min-height: 36px; border-radius: 999px; background: rgba(21, 21, 21, 0.05); color: var(--ink); box-shadow: none; font-size: 1rem; }
+      .modal-content { display: grid; gap: 14px; margin-top: 8px; }
+      .modal-headline { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      .modal-headline h3 { margin: 4px 0 6px; font-size: 1.2rem; font-weight: 600; letter-spacing: -0.04em; }
+      .modal-kicker { margin: 0; color: var(--accent); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; }
+      .modal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .modal-card, .modal-section { padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(245, 245, 245, 0.72); }
+      .modal-card strong, .modal-section strong { display: block; margin-bottom: 6px; color: var(--muted); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; }
+      .modal-card p, .modal-section p { margin: 0; font-size: 0.84rem; line-height: 1.5; }
+      a { color: var(--accent); text-decoration: none; }
+
+      @media (max-width: 760px) {
+        .topbar { grid-template-columns: 1fr; }
+        .results-head { flex-direction: column; }
+        .modal-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <main class="shell">
+        <section class="topbar">
+          <article class="topbar-card">
+            <span class="metric-label">Bestand</span>
+            <strong class="metric-value" id="metric-total">0</strong>
+            <p class="metric-note">Gekaufte Objekte</p>
+          </article>
+          <article class="topbar-card">
+            <span class="metric-label">Gesamtwert</span>
+            <strong class="metric-value" id="metric-value">-</strong>
+            <p class="metric-note">Verkehrswert Summe</p>
+          </article>
+          <article class="topbar-card">
+            <span class="metric-label">Gebote</span>
+            <strong class="metric-value" id="metric-bids">-</strong>
+            <p class="metric-note">Zielgebote Summe</p>
+          </article>
+        </section>
+
+        <section class="panel results">
+          <div class="results-head">
+            <div>
+              <h2>Portfolio</h2>
+              <p>Objekte, die aus der Pipeline in den Bestand ueberfuehrt wurden.</p>
+            </div>
+            <div class="nav-links">
+              <a class="nav-link" href="/">Markt</a>
+              <a class="nav-link" href="/pipeline">Pipeline</a>
+              <a class="nav-link is-active" href="/portfolio">Portfolio</a>
+            </div>
+            <span class="result-badge" id="result-count">0 Objekte</span>
+          </div>
+
+          <div class="table-shell">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Bundesland</th>
+                    <th>Strasse</th>
+                    <th>Ort</th>
+                    <th>Objektart</th>
+                    <th>Verkehrswert</th>
+                    <th>Zielgebot</th>
+                  </tr>
+                </thead>
+                <tbody id="rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal" id="detail-modal" hidden>
+      <div class="modal-backdrop" id="detail-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+        <button class="modal-close" id="detail-close" type="button" aria-label="Schliessen">&times;</button>
+        <div class="modal-content" id="detail-content"></div>
+      </div>
+    </div>
+    <script type="module" src="/portfolio.js"></script>
+  </body>
+</html>

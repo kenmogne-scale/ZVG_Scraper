@@ -1,0 +1,8 @@
+node_modules/
+.npm-cache/
+data/
+.env
+logs/
+.server-info.json
+.claude/settings.local.json
+scratch.txt

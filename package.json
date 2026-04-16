@@ -1,0 +1,23 @@
+{
+  "name": "scale-invest-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scraper for ZVG portal residential auction listings",
+  "scripts": {
+    "scrape": "node ./src/index.js",
+    "scrape:sample": "node ./src/index.js --states=ni --limit=5",
+    "serve": "node ./server.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.3",
+    "cheerio": "^1.1.2",
+    "dotenv": "^17.3.1",
+    "he": "^1.2.0",
+    "iconv-lite": "^0.7.0",
+    "xlsx": "^0.18.5"
+  }
+}
