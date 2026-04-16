@@ -10,7 +10,7 @@
     "serve": "node ./server.js"
   },
   "engines": {
-    "node": ">=24"
+    "node": "22.x"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",

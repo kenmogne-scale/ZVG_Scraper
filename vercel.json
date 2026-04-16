@@ -1,0 +1,38 @@
+{
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "public/**",
+      "maxDuration": 300
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/pipeline",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/portfolio",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/app.js",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/pipeline.js",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/portfolio.js",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    }
+  ]
+}
