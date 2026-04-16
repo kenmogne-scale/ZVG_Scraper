@@ -2,7 +2,7 @@ function toNumber(raw) {
   if (raw === null || raw === undefined) return null;
   const cleaned = String(raw)
     .replace(/\u00a0/g, " ")
-    .replace(/€/g, "")
+    .replace(/\u20ac/g, "")
     .replace(/\s+/g, "")
     .replace(/\.(?=\d{3}(?:\D|$))/g, "")
     .replace(",", ".");
@@ -50,14 +50,14 @@ function normalizeExtractionText(text) {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\u00a0/g, " ")
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/Ä/g, "ae")
-    .replace(/Ö/g, "oe")
-    .replace(/Ü/g, "ue")
-    .replace(/ß/g, "ss")
-    .replace(/²/g, "2")
+    .replace(/\u00e4/g, "ae")
+    .replace(/\u00f6/g, "oe")
+    .replace(/\u00fc/g, "ue")
+    .replace(/\u00c4/g, "ae")
+    .replace(/\u00d6/g, "oe")
+    .replace(/\u00dc/g, "ue")
+    .replace(/\u00df/g, "ss")
+    .replace(/\u00b2/g, "2")
     .replace(/[^\x20-\x7E]/g, " ")
     .replace(/m\s*2/g, " qm ")
     .replace(/\s+/g, " ")
@@ -143,7 +143,11 @@ function extractAreasFromText(parts) {
         label = "Wohnflaeche";
       }
 
-      if (!key && /beschreibung|detailfeld/.test((part.source ?? "").toLowerCase()) && /wohnung|appartement|penthouse|eigentumswohnung/.test(text)) {
+      if (
+        !key &&
+        /beschreibung|detailfeld/.test((part.source ?? "").toLowerCase()) &&
+        /wohnung|appartement|penthouse|eigentumswohnung/.test(text)
+      ) {
         key = "livingAreaSqm";
         label = "Wohnflaeche";
       }
@@ -179,10 +183,7 @@ function extractAreasFromText(parts) {
       (metrics.usableAreaSqm?.value ?? 0)
   );
 
-  if (
-    derivedTotal &&
-    (!metrics.totalAreaSqm || derivedTotal > metrics.totalAreaSqm.value)
-  ) {
+  if (derivedTotal && (!metrics.totalAreaSqm || derivedTotal > metrics.totalAreaSqm.value)) {
     metrics.totalAreaSqm = {
       value: derivedTotal,
       source: [
@@ -198,23 +199,24 @@ function extractAreasFromText(parts) {
 
   return metrics;
 }
+
 function extractRentMetrics(parts) {
   const metrics = {};
   const monthlyRentMatches = [];
 
   const monthlyRentRegexes = [
-    /(?:miete|kaltmiete|nettokaltmiete|ist-miete|jahresnettokaltmiete(?:\s*\/\s*12)?)(?:\s*(?:ca\.?|rd\.?|rund|gesamt|insgesamt))?\s*[:=]?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*€/gi,
-    /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*€\s*(?:miete|kaltmiete|nettokaltmiete)/gi
+    /(?:miete|kaltmiete|nettokaltmiete|ist-miete|jahresnettokaltmiete(?:\s*\/\s*12)?)(?:\s*(?:ca\.?|rd\.?|rund|gesamt|insgesamt))?\s*[:=]?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*\u20ac/gi,
+    /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*\u20ac\s*(?:miete|kaltmiete|nettokaltmiete)/gi
   ];
 
   const annualRentRegexes = [
-    /(?:jahresmiete|jahresnettokaltmiete|jahresrohertrag)(?:\s*(?:ca\.?|rd\.?|rund|gesamt|insgesamt))?\s*[:=]?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*€/gi,
-    /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*€\s*(?:jahresmiete|jahresnettokaltmiete|jahresrohertrag)/gi
+    /(?:jahresmiete|jahresnettokaltmiete|jahresrohertrag)(?:\s*(?:ca\.?|rd\.?|rund|gesamt|insgesamt))?\s*[:=]?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*\u20ac/gi,
+    /(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*\u20ac\s*(?:jahresmiete|jahresnettokaltmiete|jahresrohertrag)/gi
   ];
 
   const rentPerSqmRegexes = [
-    /(?:miete|kaltmiete|nettokaltmiete)(?:\s*\/\s*qm|\s+je\s+qm|\s+pro\s+qm)?\s*[:=]?\s*(\d{1,3}(?:,\d{1,2})?)\s*€\s*\/\s*m(?:²|2)?/gi,
-    /(\d{1,3}(?:,\d{1,2})?)\s*€\s*\/\s*m(?:²|2)?(?:\s*(?:miete|kaltmiete|nettokaltmiete))?/gi
+    /(?:miete|kaltmiete|nettokaltmiete)(?:\s*\/\s*qm|\s+je\s+qm|\s+pro\s+qm)?\s*[:=]?\s*(\d{1,3}(?:,\d{1,2})?)\s*\u20ac\s*\/\s*m(?:\u00b2|2)?/gi,
+    /(\d{1,3}(?:,\d{1,2})?)\s*\u20ac\s*\/\s*m(?:\u00b2|2)?(?:\s*(?:miete|kaltmiete|nettokaltmiete))?/gi
   ];
 
   for (const part of parts) {
@@ -339,17 +341,3 @@ export function analyzeAuctionKpis(auction) {
     }
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
