@@ -1,6 +1,6 @@
 import { analyzeAuctionKpis } from "./deal-analysis-clean.js";
 
-const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 const KPI_KEYS = [
   "livingAreaSqm",
   "commercialAreaSqm",
@@ -27,8 +27,8 @@ function toNullableNumber(value) {
   return Number.isFinite(normalized) ? round(normalized) : null;
 }
 
-function hasGeminiConfig() {
-  return Boolean(process.env.GEMINI_API_KEY);
+function hasAiConfig() {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 function missingKpiKeys(extracted = {}) {
@@ -63,7 +63,7 @@ function extractJson(text) {
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error("Gemini response did not contain JSON");
+    throw new Error("AI response did not contain JSON");
   }
   return JSON.parse(candidate.slice(start, end + 1));
 }
@@ -106,60 +106,60 @@ function sanitizeAiPayload(payload = {}) {
   };
 }
 
-async function requestGeminiKpis(auction, missingKeys) {
-  const apiKey = process.env.GEMINI_API_KEY;
+async function requestAiKpis(auction, missingKeys) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing GEMINI_API_KEY");
+    throw new Error("Missing ANTHROPIC_API_KEY");
   }
 
-  const prompt = [
+  const systemPrompt = [
     "Du extrahierst nur rohe Immobilien-KPIs aus deutschem ZVG-Text.",
     "Liefere ausschliesslich JSON.",
     "Erfinde keine Werte. Wenn etwas nicht klar genannt ist, gib null zurueck.",
     "Gesucht sind nur diese Felder:",
     missingKeys.join(", "),
     "Optional darfst du annualRentEur zur Umrechnung angeben.",
-    '{"livingAreaSqm":null,"commercialAreaSqm":null,"usableAreaSqm":null,"totalAreaSqm":null,"plotAreaSqm":null,"monthlyRentEur":null,"annualRentEur":null,"sources":{},"confidence":{}}',
-    "",
-    "Kontext:",
-    buildAuctionContext(auction)
+    "Antwortformat:",
+    '{"livingAreaSqm":null,"commercialAreaSqm":null,"usableAreaSqm":null,"totalAreaSqm":null,"plotAreaSqm":null,"monthlyRentEur":null,"annualRentEur":null,"sources":{},"confidence":{}}'
   ].join("\n");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(DEFAULT_GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        generationConfig: {
-          temperature: 0,
-          responseMimeType: "application/json"
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }]
-          }
-        ]
-      })
-    }
-  );
+  const userMessage = buildAuctionContext(auction);
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: DEFAULT_MODEL,
+      max_tokens: 1024,
+      temperature: 0,
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: userMessage
+        }
+      ]
+    })
+  });
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Gemini request failed: ${response.status} ${message}`);
+    throw new Error(`Anthropic request failed: ${response.status} ${message}`);
   }
 
   const payload = await response.json();
-  const text = payload.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text ?? "")
+  const text = payload.content
+    ?.filter((block) => block.type === "text")
+    .map((block) => block.text)
     .join("\n")
     .trim();
 
   if (!text) {
-    throw new Error("Gemini response was empty");
+    throw new Error("AI response was empty");
   }
 
   return sanitizeAiPayload(extractJson(text));
@@ -213,12 +213,12 @@ export async function analyzeAuctionWithKpiFallback(auction) {
   const parserExtracted = parserAnalysis.screening?.extracted ?? {};
   const missingKeys = missingKpiKeys(parserExtracted);
 
-  if (!missingKeys.length || !hasGeminiConfig()) {
+  if (!missingKeys.length || !hasAiConfig()) {
     return parserAnalysis;
   }
 
   try {
-    const ai = await requestGeminiKpis(auction, missingKeys);
+    const ai = await requestAiKpis(auction, missingKeys);
     const mergedExtracted = mergeExtracted(parserExtracted, ai.extracted);
     const mergedSources = mergeSources(
       parserAnalysis.screening?.sources ?? {},
@@ -245,8 +245,8 @@ export async function analyzeAuctionWithKpiFallback(auction) {
           ...ai.confidence
         },
         ai: {
-          provider: "gemini",
-          model: DEFAULT_GEMINI_MODEL,
+          provider: "anthropic",
+          model: DEFAULT_MODEL,
           filledKeys: aiFilledKeys,
           attemptedAt: new Date().toISOString()
         },
@@ -277,8 +277,8 @@ export async function analyzeAuctionWithKpiFallback(auction) {
       screening: {
         ...(parserAnalysis.screening ?? {}),
         ai: {
-          provider: "gemini",
-          model: DEFAULT_GEMINI_MODEL,
+          provider: "anthropic",
+          model: DEFAULT_MODEL,
           attemptedAt: new Date().toISOString(),
           error: error.message
         },

@@ -1,3 +1,5 @@
+import { createExcelTable } from "/excel-table.js";
+
 const rowsEl = document.querySelector("#rows");
 const searchEl = document.querySelector("#search");
 const typeEl = document.querySelector("#type");
@@ -11,6 +13,7 @@ const resultCountEl = document.querySelector("#result-count");
 const menuButtonEl = document.querySelector("#menu-button");
 const controlDrawerEl = document.querySelector("#control-drawer");
 const drawerCloseEl = document.querySelector("#drawer-close");
+const drawerCloseBackdropEl = document.querySelector("#drawer-close-backdrop");
 const drawerBackdropEl = document.querySelector("#drawer-backdrop");
 const loadingOverlayEl = document.querySelector("#loading-overlay");
 const tableContextEl = document.querySelector("#table-context");
@@ -30,24 +33,21 @@ let records = [];
 let scrapeInFlight = false;
 let pollTimer = null;
 let pagination = { page: 1, pageSize: 10, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false };
+const TABLE_PAGE_SIZE = 100;
 const DEFAULT_SCRAPE_DELAY_MS = 350;
 
 function openDrawer() {
-  controlDrawerEl.classList.add("is-open");
-  controlDrawerEl.setAttribute("aria-hidden", "false");
-  drawerBackdropEl.hidden = false;
+  controlDrawerEl.hidden = false;
   menuButtonEl.setAttribute("aria-expanded", "true");
 }
 
 function closeDrawer() {
-  controlDrawerEl.classList.remove("is-open");
-  controlDrawerEl.setAttribute("aria-hidden", "true");
-  drawerBackdropEl.hidden = true;
+  controlDrawerEl.hidden = true;
   menuButtonEl.setAttribute("aria-expanded", "false");
 }
 
 function toggleDrawer() {
-  if (controlDrawerEl.classList.contains("is-open")) {
+  if (!controlDrawerEl.hidden) {
     closeDrawer();
     return;
   }
@@ -331,51 +331,66 @@ function closeDetailModal() {
   document.body.classList.remove("modal-open");
 }
 
+function renderDatabaseRow(item) {
+  const auctionParts = formatAuctionParts(item);
+  const objectName = escapeHtml(item.objectType ?? "Unbekannt");
+  const addr = item.address ?? {};
+  const stateName = addr.state ?? "";
+  const streetLine = addr.street ?? item.locationText ?? "";
+
+  return `
+    <tr data-auction-key="${escapeHtml(item.auctionKey ?? "")}">
+      <td>
+        ${stateName ? `<span class="pill">${escapeHtml(stateName)}</span>` : '<span class="small">-</span>'}
+      </td>
+      <td>
+        <span class="row-title">${escapeHtml(streetLine || "-")}</span>
+      </td>
+      <td>${escapeHtml(addr.postalCode ?? "-")}</td>
+      <td>
+        ${escapeHtml(addr.city ?? "-")}
+        ${item.cityData?.population ? `<div class="small">${new Intl.NumberFormat("de-DE").format(item.cityData.population)} EW</div>` : ""}
+      </td>
+      <td>${objectName}</td>
+      <td>${escapeHtml(eur(item.valuationAmountEur))}</td>
+      <td>
+        <div>${escapeHtml(auctionParts.date)}</div>
+        ${auctionParts.time ? `<div class="small">${escapeHtml(auctionParts.time)}</div>` : ""}
+        ${auctionParts.note ? `<div class="small">${escapeHtml(auctionParts.note)}</div>` : ""}
+      </td>
+    </tr>
+  `;
+}
+
+const excelTable = createExcelTable({
+  table: "table",
+  rows: rowsEl,
+  storageKey: "database-excel-table",
+  columns: [
+    { key: "state", label: "Bundesland", value: (item) => item.address?.state ?? item.landCode?.toUpperCase() ?? "" },
+    { key: "street", label: "Strasse", value: (item) => item.address?.street ?? item.locationText ?? "" },
+    { key: "postalCode", label: "PLZ", value: (item) => item.address?.postalCode ?? "" },
+    { key: "city", label: "Ort", value: (item) => item.address?.city ?? "" },
+    { key: "objectType", label: "Objektart", value: (item) => item.objectType ?? "" },
+    { key: "valuation", label: "Wert", type: "number", value: (item) => item.valuationAmountEur, filterLabel: (item) => eur(item.valuationAmountEur) },
+    { key: "auctionDate", label: "Termin", type: "date", value: (item) => item.auctionDateIso ?? item.auctionDateText ?? "", filterLabel: (item) => formatAuctionParts(item).date }
+  ],
+  renderRow: renderDatabaseRow,
+  emptyRow: (colspan) => `
+    <tr class="empty-row">
+      <td colspan="${colspan}">Keine passenden Eintraege auf dieser Seite gefunden.</td>
+    </tr>
+  `,
+  onRender: (items) => renderResultCount(items.length)
+});
+
 function renderTable(items) {
   if (!items.length) {
-    rowsEl.innerHTML = `
-      <tr class="empty-row">
-        <td colspan="7">Keine passenden Eintraege auf dieser Seite gefunden.</td>
-      </tr>
-    `;
-    renderResultCount(0);
+    excelTable.apply([]);
     return;
   }
 
-  renderResultCount(items.length);
-  rowsEl.innerHTML = items
-    .map((item) => {
-      const auctionParts = formatAuctionParts(item);
-      const objectName = escapeHtml(item.objectType ?? "Unbekannt");
-
-      const addr = item.address ?? {};
-      const stateName = addr.state ?? "";
-      const streetLine = addr.street ?? item.locationText ?? "";
-
-      return `
-        <tr data-auction-key="${escapeHtml(item.auctionKey ?? "")}">
-          <td>
-            ${stateName ? `<span class="pill">${escapeHtml(stateName)}</span>` : '<span class="small">-</span>'}
-          </td>
-          <td>
-            <span class="row-title">${escapeHtml(streetLine || "-")}</span>
-          </td>
-          <td>${escapeHtml(addr.postalCode ?? "-")}</td>
-          <td>
-            ${escapeHtml(addr.city ?? "-")}
-            ${item.cityData?.population ? `<div class="small">${new Intl.NumberFormat("de-DE").format(item.cityData.population)} EW</div>` : ""}
-          </td>
-          <td>${objectName}</td>
-          <td>${escapeHtml(eur(item.valuationAmountEur))}</td>
-          <td>
-            <div>${escapeHtml(auctionParts.date)}</div>
-            ${auctionParts.time ? `<div class="small">${escapeHtml(auctionParts.time)}</div>` : ""}
-            ${auctionParts.note ? `<div class="small">${escapeHtml(auctionParts.note)}</div>` : ""}
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
+  excelTable.apply(items);
 }
 
 function renderPagination() {
@@ -479,7 +494,7 @@ async function loadStatus() {
 }
 
 async function loadAuctions(page = 1) {
-  const res = await fetch(`/api/auctions?page=${page}&pageSize=10&scope=upcoming`);
+  const res = await fetch(`/api/auctions?page=${page}&pageSize=${TABLE_PAGE_SIZE}&scope=upcoming`);
   if (!res.ok) {
     rowsEl.innerHTML = `<tr><td colspan="7">Keine Daten gefunden. Bitte den Scraper starten.</td></tr>`;
     records = [];
@@ -619,7 +634,8 @@ window.addEventListener("keydown", (event) => {
 });
 menuButtonEl.addEventListener("click", toggleDrawer);
 drawerCloseEl.addEventListener("click", closeDrawer);
-drawerBackdropEl.addEventListener("click", closeDrawer);
+drawerCloseBackdropEl?.addEventListener("click", closeDrawer);
+drawerBackdropEl?.addEventListener("click", closeDrawer);
 scrapeButtonEl.addEventListener("click", () => {
   startScrape().catch((error) => {
     scrapeStatusEl.textContent = error.message;

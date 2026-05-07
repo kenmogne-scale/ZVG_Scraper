@@ -1,3 +1,5 @@
+import { createExcelTable } from "/excel-table.js";
+
 const rowsEl = document.querySelector("#rows");
 const searchEl = document.querySelector("#search");
 const stageFilterEl = document.querySelector("#stage-filter");
@@ -17,6 +19,30 @@ const nextPageEl = document.querySelector("#next-page");
 
 let pipeline = [];
 let pagination = { page: 1, pageSize: 10, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false };
+const TABLE_PAGE_SIZE = 100;
+const FAVORITES_STORAGE_KEY = "scale-invest-favorite-auctions";
+
+function getLocalFavorites() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function setLocalFavorite(auctionKey, isFavorite) {
+  const favorites = getLocalFavorites();
+  if (isFavorite) {
+    favorites.add(auctionKey);
+  } else {
+    favorites.delete(auctionKey);
+  }
+  localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...favorites]));
+}
+
+function isFavoriteItem(item) {
+  return Boolean(item.pipeline?.isFavorite) || getLocalFavorites().has(item.auctionKey);
+}
 
 function escapeHtml(value = "") {
   return String(value)
@@ -170,34 +196,64 @@ function applyFilters() {
   renderTable(matching);
 }
 
+function renderPipelineRow(item) {
+  const addr = item.address ?? {};
+  const totalArea = areaValue(item);
+  const pricePerSqm = pricePerSqmValue(item);
+  const isFavorite = isFavoriteItem(item);
+  return `
+    <tr data-auction-key="${escapeHtml(item.auctionKey ?? "")}">
+      <td>
+        <button class="favorite-toggle ${isFavorite ? "is-active" : ""}" type="button" data-favorite-toggle data-auction-key="${escapeHtml(item.auctionKey ?? "")}" aria-label="${isFavorite ? "Favorit entfernen" : "Als Favorit markieren"}" title="${isFavorite ? "Favorit entfernen" : "Als Favorit markieren"}"></button>
+      </td>
+      <td>${addr.state ? `<span class="pill">${escapeHtml(addr.state)}</span>` : '<span class="small">-</span>'}</td>
+      <td><span class="row-title">${escapeHtml(addr.street ?? item.locationText ?? "-")}</span></td>
+      <td>
+        ${escapeHtml(addr.city ?? "-")}
+        ${item.cityData?.population ? `<div class="small">${new Intl.NumberFormat("de-DE").format(item.cityData.population)} EW</div>` : ""}
+      </td>
+      <td>${escapeHtml(item.objectType ?? "-")}</td>
+      <td>${escapeHtml(eur(item.valuationAmountEur))}</td>
+      <td>${totalArea != null ? escapeHtml(`${decimal(totalArea)} qm`) : '<span class="small">-</span>'}</td>
+      <td>${pricePerSqm != null ? `<span class="row-title">${escapeHtml(`${eur(pricePerSqm)}/qm`)}</span>` : '<span class="small">-</span>'}</td>
+      <td>${escapeHtml(formatAuctionDate(item))}</td>
+    </tr>
+  `;
+}
+
+const excelTable = createExcelTable({
+  table: "table",
+  rows: rowsEl,
+  storageKey: "pipeline-excel-table",
+  columns: [
+    { key: "favorite", label: "Favorit", value: (item) => isFavoriteItem(item) ? "Favorit" : "-", filterLabel: (item) => isFavoriteItem(item) ? "Favorit" : "-" },
+    { key: "state", label: "Bundesland", value: (item) => item.address?.state ?? item.landCode?.toUpperCase() ?? "" },
+    { key: "street", label: "Strasse", value: (item) => item.address?.street ?? item.locationText ?? "" },
+    { key: "city", label: "Ort", value: (item) => item.address?.city ?? "" },
+    { key: "objectType", label: "Objektart", value: (item) => item.objectType ?? "" },
+    { key: "valuation", label: "Wert", type: "number", value: (item) => item.valuationAmountEur, filterLabel: (item) => eur(item.valuationAmountEur) },
+    { key: "area", label: "Gesamtflaeche", type: "number", value: areaValue, filterLabel: (item) => {
+      const value = areaValue(item);
+      return value != null ? `${decimal(value)} qm` : "-";
+    } },
+    { key: "pricePerSqm", label: "Preis / qm", type: "number", value: pricePerSqmValue, filterLabel: (item) => {
+      const value = pricePerSqmValue(item);
+      return value != null ? `${eur(value)}/qm` : "-";
+    } },
+    { key: "auctionDate", label: "Termin", type: "date", value: (item) => item.auctionDateIso ?? item.auctionDateText ?? "", filterLabel: formatAuctionDate }
+  ],
+  renderRow: renderPipelineRow,
+  emptyRow: (colspan) => `<tr class="empty-row"><td colspan="${colspan}">Keine Pipeline-Objekte auf dieser Seite gefunden.</td></tr>`,
+  onRender: (items) => renderResultCount(items.length)
+});
+
 function renderTable(items) {
   if (!items.length) {
-    rowsEl.innerHTML = '<tr class="empty-row"><td colspan="8">Keine Pipeline-Objekte auf dieser Seite gefunden.</td></tr>';
-    renderResultCount(0);
+    excelTable.apply([]);
     return;
   }
 
-  renderResultCount(items.length);
-  rowsEl.innerHTML = items.map((item) => {
-    const addr = item.address ?? {};
-    const totalArea = areaValue(item);
-    const pricePerSqm = pricePerSqmValue(item);
-    return `
-      <tr data-auction-key="${escapeHtml(item.auctionKey ?? "")}">
-        <td>${addr.state ? `<span class="pill">${escapeHtml(addr.state)}</span>` : '<span class="small">-</span>'}</td>
-        <td><span class="row-title">${escapeHtml(addr.street ?? item.locationText ?? "-")}</span></td>
-        <td>
-          ${escapeHtml(addr.city ?? "-")}
-          ${item.cityData?.population ? `<div class="small">${new Intl.NumberFormat("de-DE").format(item.cityData.population)} EW</div>` : ""}
-        </td>
-        <td>${escapeHtml(item.objectType ?? "-")}</td>
-        <td>${escapeHtml(eur(item.valuationAmountEur))}</td>
-        <td>${totalArea != null ? escapeHtml(`${decimal(totalArea)} qm`) : '<span class="small">-</span>'}</td>
-        <td>${pricePerSqm != null ? `<span class="row-title">${escapeHtml(`${eur(pricePerSqm)}/qm`)}</span>` : '<span class="small">-</span>'}</td>
-        <td>${escapeHtml(formatAuctionDate(item))}</td>
-      </tr>
-    `;
-  }).join("");
+  excelTable.apply(items);
 }
 
 function renderPagination() {
@@ -386,7 +442,7 @@ function closeDetailModal() {
 }
 
 async function reload(page = 1) {
-  const res = await fetch(`/api/pipeline?page=${page}&pageSize=10&scope=upcoming`);
+  const res = await fetch(`/api/pipeline?page=${page}&pageSize=${TABLE_PAGE_SIZE}&scope=upcoming`);
   const payload = await res.json();
   pipeline = payload.items ?? [];
   pagination = payload.pagination ?? pagination;
@@ -396,11 +452,53 @@ async function reload(page = 1) {
 }
 
 rowsEl.addEventListener("click", (event) => {
+  const favoriteButton = event.target.closest("[data-favorite-toggle]");
+  if (favoriteButton) {
+    event.stopPropagation();
+    toggleFavorite(favoriteButton.dataset.auctionKey, favoriteButton).catch((error) => {
+      window.alert(error.message);
+    });
+    return;
+  }
+
   const row = event.target.closest("[data-auction-key]");
   if (!row) return;
   const item = pipeline.find((i) => i.auctionKey === row.dataset.auctionKey);
   if (item) renderDetailModal(item);
 });
+
+async function toggleFavorite(auctionKey, button) {
+  const item = pipeline.find((i) => i.auctionKey === auctionKey);
+  if (!item) return;
+
+  const nextValue = !isFavoriteItem(item);
+  setLocalFavorite(auctionKey, nextValue);
+  item.pipeline = { ...(item.pipeline ?? {}), isFavorite: nextValue };
+  applyFilters();
+
+  button.disabled = true;
+
+  try {
+    const res = await fetch(`/api/pipeline/${encodeURIComponent(auctionKey)}/favorite`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isFavorite: nextValue })
+    });
+    const payload = await res.json();
+    if (!res.ok) {
+      throw new Error(payload.error ?? "Favorit konnte nicht serverseitig gespeichert werden");
+    }
+
+    const index = pipeline.findIndex((entry) => entry.auctionKey === auctionKey);
+    if (index >= 0) {
+      pipeline[index] = payload;
+    }
+  } catch (error) {
+    console.warn(error.message);
+  } finally {
+    applyFilters();
+  }
+}
 
 detailContentEl.addEventListener("click", async (event) => {
   const button = event.target.closest("#run-analysis-button");
@@ -426,6 +524,7 @@ detailContentEl.addEventListener("click", async (event) => {
     if (index >= 0) {
       pipeline[index] = payload;
     }
+    applyFilters();
     renderDetailModal(payload);
   } catch (error) {
     window.alert(error.message);
