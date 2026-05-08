@@ -445,6 +445,7 @@ function hydrateAuctionRow(row, documentsByAuction, citiesLookup = new Map()) {
           thesis: pipeline.thesis,
           nextStep: pipeline.next_step,
           targetBidEur: pipeline.target_bid_eur,
+          isFavorite: Boolean(pipeline.is_favorite),
           createdAt: pipeline.created_at,
           updatedAt: pipeline.updated_at
         }
@@ -541,6 +542,51 @@ export async function listPipelineItems({ page = 1, pageSize = 10, scope = "upco
   return paginateItems(hydrated, { page, pageSize });
 }
 
+export async function listFavoritePipelineItems({ page = 1, pageSize = 100, scope = "upcoming" } = {}) {
+  const client = getClient();
+
+  const { data: favoriteKeys, error: favoriteError } = await client
+    .from("pipeline_items")
+    .select("auction_key")
+    .eq("is_favorite", true);
+
+  if (favoriteError) {
+    throw new Error(`listFavoritePipelineItems failed: ${favoriteError.message}`);
+  }
+
+  if (!favoriteKeys || favoriteKeys.length === 0) {
+    return paginateItems([], { page, pageSize });
+  }
+
+  const keys = favoriteKeys.map((row) => row.auction_key);
+  const query = client
+    .from("auctions")
+    .select(`
+      *,
+      pipeline_items (*),
+      auction_analysis (*)
+    `)
+    .in("auction_key", keys)
+    .order("auction_date_iso", { ascending: true, nullsFirst: false })
+    .order("aktenzeichen", { ascending: true });
+
+  if (scope === "upcoming") {
+    query.gte("auction_date_iso", new Date().toISOString());
+  }
+
+  const { data: auctions, error } = await query;
+
+  if (error) {
+    throw new Error(`listFavoritePipelineItems auctions failed: ${error.message}`);
+  }
+
+  const documentsByAuction = await getDocumentsByAuction(client);
+  const citiesLookup = await loadCitiesLookup(client);
+  const hydrated = auctions.map((row) => hydrateAuctionRow(row, documentsByAuction, citiesLookup));
+
+  return paginateItems(hydrated, { page, pageSize });
+}
+
 export async function getAuctionByKey(auctionKey) {
   const client = getClient();
 
@@ -613,6 +659,51 @@ export async function upsertPipelineItem({
 
   if (error) {
     throw new Error(`upsertPipelineItem failed: ${error.message}`);
+  }
+
+  return getAuctionByKey(auctionKey);
+}
+
+export async function updatePipelineFavorite({ auctionKey, isFavorite }) {
+  const client = getClient();
+  const { data: existing, error: lookupError } = await client
+    .from("pipeline_items")
+    .select("auction_key")
+    .eq("auction_key", auctionKey)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new Error(`updatePipelineFavorite lookup failed: ${lookupError.message}`);
+  }
+
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const { error } = await client
+      .from("pipeline_items")
+      .update({ is_favorite: Boolean(isFavorite), updated_at: now })
+      .eq("auction_key", auctionKey);
+
+    if (error) {
+      throw new Error(`updatePipelineFavorite failed: ${error.message}`);
+    }
+  } else {
+    const { error } = await client.from("pipeline_items").insert({
+      auction_key: auctionKey,
+      stage: "shortlist",
+      priority: "medium",
+      source: "favorite",
+      thesis: null,
+      next_step: null,
+      target_bid_eur: null,
+      is_favorite: Boolean(isFavorite),
+      created_at: now,
+      updated_at: now
+    });
+
+    if (error) {
+      throw new Error(`updatePipelineFavorite insert failed: ${error.message}`);
+    }
   }
 
   return getAuctionByKey(auctionKey);

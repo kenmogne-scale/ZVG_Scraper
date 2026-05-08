@@ -97,9 +97,17 @@ CREATE TABLE IF NOT EXISTS pipeline_items (
   thesis TEXT,
   next_step TEXT,
   target_bid_eur DOUBLE PRECISION,
+  is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE pipeline_items
+  ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_items_is_favorite
+  ON pipeline_items (is_favorite)
+  WHERE is_favorite = TRUE;
 
 -- 6. Auction Analysis (scoring)
 CREATE TABLE IF NOT EXISTS auction_analysis (

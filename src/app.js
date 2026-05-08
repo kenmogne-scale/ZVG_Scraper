@@ -8,9 +8,11 @@ import {
   getDatabaseInfo,
   getLatestRun,
   listAuctions,
+  listFavoritePipelineItems,
   listPipelineItems,
   runAutomatedAnalysis,
   updateAuctionAnalysis,
+  updatePipelineFavorite,
   upsertPipelineItem
 } from "./db.js";
 import { runScrape } from "./scrape.js";
@@ -150,13 +152,24 @@ export async function handleRequest(req, res, options = {}) {
     }
   }
 
-  if (pathname === "/api/portfolio") {
-    const payload = await listPipelineItems({ page: 1, pageSize: 500, scope: "all" });
-    sendJson(
-      res,
-      200,
-      payload.items.filter((item) => item.pipeline?.stage === "gekauft")
-    );
+  const favoriteMatch = pathname.match(/^\/api\/pipeline\/(.+)\/favorite$/);
+  if (favoriteMatch && req.method === "PATCH") {
+    try {
+      const auctionKey = decodeURIComponent(favoriteMatch[1]);
+      const body = await readJsonBody(req);
+      const record = await updatePipelineFavorite({
+        auctionKey,
+        isFavorite: Boolean(body.isFavorite)
+      });
+      sendJson(res, 200, record);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+    }
+    return;
+  }
+
+  if (pathname === "/api/favorites") {
+    sendJson(res, 200, await listFavoritePipelineItems({ page: 1, pageSize: 500, scope: "all" }));
     return;
   }
 
@@ -329,6 +342,16 @@ export async function handleRequest(req, res, options = {}) {
     return;
   }
 
+  if (pathname === "/excel-table.js") {
+    await serveStatic(res, path.join(publicDir, "excel-table.js"));
+    return;
+  }
+
+  if (pathname === "/design.css") {
+    await serveStatic(res, path.join(publicDir, "design.css"));
+    return;
+  }
+
   if (pathname === "/pipeline" || pathname === "/pipeline.html") {
     await serveStatic(res, path.join(publicDir, "pipeline.html"));
     return;
@@ -339,12 +362,12 @@ export async function handleRequest(req, res, options = {}) {
     return;
   }
 
-  if (pathname === "/portfolio" || pathname === "/portfolio.html") {
+  if (pathname === "/favorites" || pathname === "/favorites.html" || pathname === "/portfolio" || pathname === "/portfolio.html") {
     await serveStatic(res, path.join(publicDir, "portfolio.html"));
     return;
   }
 
-  if (pathname === "/portfolio.js") {
+  if (pathname === "/favorites.js" || pathname === "/portfolio.js") {
     await serveStatic(res, path.join(publicDir, "portfolio.js"));
     return;
   }

@@ -19,6 +19,10 @@
       "destination": "/api/index"
     },
     {
+      "source": "/favorites",
+      "destination": "/api/index"
+    },
+    {
       "source": "/app.js",
       "destination": "/api/index"
     },
@@ -28,6 +32,10 @@
     },
     {
       "source": "/portfolio.js",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/favorites.js",
       "destination": "/api/index"
     },
     {
